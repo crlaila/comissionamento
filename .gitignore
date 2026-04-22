@@ -1,0 +1,29 @@
+# Compozy workflow files
+.compozy/
+
+# Secrets — NUNCA versionar senhas e tokens
+.env
+
+# Claude Code config
+.claude
+
+# Go — binários compilados
+bin/
+*.exe
+
+# Node.js — dependências instaladas (recriáveis com npm install)
+web/node_modules/
+
+# Vite — arquivos de build do frontend
+web/dist/
+
+# IDE — configurações pessoais do editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS — arquivos gerados pelo sistema operacional
+.DS_Store
+Thumbs.db

@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS periods;
+DROP TYPE IF EXISTS period_status;
