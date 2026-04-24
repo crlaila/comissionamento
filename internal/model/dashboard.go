@@ -26,3 +26,11 @@ type RepDashboardSummary struct {
 	AttainmentPct   float64 `json:"attainment_pct"`
 	CommissionEarned int64   `json:"commission_earned"` // in centavos
 }
+
+type OrgDashboard struct {
+	PeriodName          string   `json:"period_name"`
+	TotalCommissionAmount int64  `json:"total_commission_amount"` // in centavos
+	TotalReps           int      `json:"total_reps"`
+	AverageAttainmentPct float64 `json:"average_attainment_pct"`
+	PeriodStatus        string   `json:"period_status"`
+}

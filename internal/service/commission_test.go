@@ -89,6 +89,15 @@ func (m *MockStatementRepository) GetByRepAndPeriod(ctx context.Context, repID, 
 	return m.statements[key], nil
 }
 
+func (m *MockStatementRepository) GetByID(ctx context.Context, id int64) (*model.Statement, error) {
+	for _, stmt := range m.statements {
+		if stmt.ID == id {
+			return stmt, nil
+		}
+	}
+	return nil, nil
+}
+
 func (m *MockStatementRepository) ListByPeriod(ctx context.Context, periodID int64) ([]*model.Statement, error) {
 	var stmts []*model.Statement
 	for _, stmt := range m.statements {

@@ -22,6 +22,7 @@ type PeriodRepository interface {
 
 type StatementRepository interface {
 	Create(ctx context.Context, statement *model.Statement) error
+	GetByID(ctx context.Context, id int64) (*model.Statement, error)
 	GetByRepAndPeriod(ctx context.Context, repID, periodID int64) (*model.Statement, error)
 	ListByPeriod(ctx context.Context, periodID int64) ([]*model.Statement, error)
 	UpdateStatus(ctx context.Context, id int64, status model.StatementStatus, approverID *int64, reason *string) error
@@ -36,6 +37,7 @@ type CommissionService interface {
 	CalculateForPeriod(ctx context.Context, periodID int64) error
 	GetRepDashboard(ctx context.Context, repID int64) (*model.RepDashboard, error)
 	GetTeamDashboard(ctx context.Context, managerID int64) (*model.TeamDashboard, error)
+	GetOrgDashboard(ctx context.Context) (*model.OrgDashboard, error)
 	GenerateStatements(ctx context.Context, periodID int64) error
 	ApproveStatement(ctx context.Context, statementID int64, approverID int64) error
 }
@@ -316,6 +318,51 @@ func (s *commissionService) GetTeamDashboard(ctx context.Context, managerID int6
 		PeriodName:      period.Name,
 		TotalCommission: totalCommission,
 		DirectReports:   directReports,
+	}, nil
+}
+
+// GetOrgDashboard aggregates organization-wide commission data for finance view
+func (s *commissionService) GetOrgDashboard(ctx context.Context) (*model.OrgDashboard, error) {
+	// Get current period
+	periods, err := s.periodRepository.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list periods: %w", err)
+	}
+
+	if len(periods) == 0 {
+		return nil, fmt.Errorf("no periods found")
+	}
+
+	period := periods[0]
+
+	// Get all statements for this period to calculate totals
+	statements, err := s.statementRepository.ListByPeriod(ctx, period.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list statements: %w", err)
+	}
+
+	// Calculate totals
+	totalAmount := int64(0)
+	totalAttainment := 0.0
+	repsCount := 0
+
+	for _, stmt := range statements {
+		totalAmount += stmt.TotalAmount
+		totalAttainment += stmt.AttainmentPct
+		repsCount++
+	}
+
+	var avgAttainment float64
+	if repsCount > 0 {
+		avgAttainment = totalAttainment / float64(repsCount)
+	}
+
+	return &model.OrgDashboard{
+		PeriodName:            period.Name,
+		TotalCommissionAmount: totalAmount,
+		TotalReps:             repsCount,
+		AverageAttainmentPct:  avgAttainment,
+		PeriodStatus:          string(period.Status),
 	}, nil
 }
 

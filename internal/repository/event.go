@@ -156,3 +156,43 @@ func (r *MemberEventRepository) CountByRepAndType(ctx context.Context, repID int
 
 	return count, nil
 }
+
+func (r *MemberEventRepository) ListByRep(ctx context.Context, repID int64) ([]*model.MemberEvent, error) {
+	query := `
+		SELECT id, hinova_id, rep_id, event_type, member_name, event_date, synced_at, created_at
+		FROM member_events
+		WHERE rep_id = $1
+		ORDER BY event_date DESC
+	`
+
+	rows, err := r.pool.Query(ctx, query, repID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query events by rep: %w", err)
+	}
+	defer rows.Close()
+
+	var events []*model.MemberEvent
+	for rows.Next() {
+		var event model.MemberEvent
+		err := rows.Scan(
+			&event.ID,
+			&event.HinovaID,
+			&event.RepID,
+			&event.EventType,
+			&event.MemberName,
+			&event.EventDate,
+			&event.SyncedAt,
+			&event.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan event: %w", err)
+		}
+		events = append(events, &event)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating events: %w", err)
+	}
+
+	return events, nil
+}

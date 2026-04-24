@@ -1,0 +1,43 @@
+.sync-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #718096;
+  padding: 8px 12px;
+  background-color: #f7fafc;
+  border-radius: 4px;
+  border: 1px solid #e2e8f0;
+}
+
+.sync-status.pending {
+  color: #d69e2e;
+}
+
+.sync-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #48bb78;
+  animation: pulse 2s infinite;
+}
+
+.sync-status.pending .sync-indicator {
+  background-color: #ed8936;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.sync-time {
+  font-weight: 600;
+  color: #2d3748;
+}

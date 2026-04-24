@@ -57,8 +57,11 @@ func main() {
 	userRepo := repository.NewUserRepository(pool)
 	periodRepo := repository.NewPeriodRepository(pool)
 	eventRepo := repository.NewMemberEventRepository(pool)
+	goalRepo := repository.NewGoalRepository(pool)
+	statementRepo := repository.NewStatementRepository(pool)
 	authService := service.NewAuthService(jwtSecret, userRepo)
 	authMiddleware := middleware.NewAuthMiddleware(authService)
+	commissionService := service.NewCommissionService(goalRepo, periodRepo, userRepo, statementRepo, eventRepo, pool)
 
 	// Initialize Hinova client
 	hinovaToken := os.Getenv("HINOVA_API_TOKEN")
@@ -79,11 +82,19 @@ func main() {
 	}
 	syncService := service.NewSyncService(hinovaClient, eventRepo, syncInterval)
 
+	// Initialize repositories for handlers
+	auditRepo := repository.NewAuditLogRepository(pool)
+
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(authService)
 	userHandler := handler.NewUserHandler(authService, userRepo)
 	periodHandler := handler.NewPeriodHandler(periodRepo)
 	syncHandler := handler.NewSyncHandler(syncService)
+	dashboardHandler := handler.NewDashboardHandler(commissionService)
+	goalHandler := handler.NewGoalHandler(goalRepo, periodRepo)
+	eventHandler := handler.NewEventHandler(eventRepo, userRepo, periodRepo)
+	statementHandler := handler.NewStatementHandler(statementRepo, commissionService, auditRepo, periodRepo, userRepo, pool)
+	reportHandler := handler.NewReportHandler(statementRepo, periodRepo, userRepo, goalRepo, eventRepo)
 
 	mux := http.NewServeMux()
 
@@ -112,6 +123,33 @@ func main() {
 	// Sync endpoints
 	mux.HandleFunc("GET /api/sync/status", syncHandler.GetStatus)
 	mux.Handle("POST /api/sync/trigger", authMiddleware.Authenticate(authMiddleware.RequireRole("admin")(http.HandlerFunc(syncHandler.Trigger))))
+
+	// Dashboard endpoints
+	mux.Handle("GET /api/dashboard/rep", authMiddleware.Authenticate(http.HandlerFunc(dashboardHandler.GetRepDashboard)))
+	mux.Handle("GET /api/dashboard/team", authMiddleware.Authenticate(http.HandlerFunc(dashboardHandler.GetTeamDashboard)))
+	mux.Handle("GET /api/dashboard/org", authMiddleware.Authenticate(http.HandlerFunc(dashboardHandler.GetOrgDashboard)))
+
+	// Goal endpoints
+	mux.Handle("GET /api/goals", authMiddleware.Authenticate(http.HandlerFunc(goalHandler.ListGoals)))
+	mux.Handle("POST /api/goals", authMiddleware.Authenticate(http.HandlerFunc(goalHandler.CreateGoal)))
+	mux.Handle("PUT /api/goals/{id}", authMiddleware.Authenticate(http.HandlerFunc(goalHandler.UpdateGoal)))
+
+	// Event endpoints
+	mux.Handle("GET /api/events", authMiddleware.Authenticate(http.HandlerFunc(eventHandler.ListEvents)))
+	mux.Handle("GET /api/events/{id}", authMiddleware.Authenticate(http.HandlerFunc(eventHandler.GetEvent)))
+
+	// Statement endpoints
+	mux.Handle("GET /api/statements", authMiddleware.Authenticate(http.HandlerFunc(statementHandler.GetStatements)))
+	mux.Handle("GET /api/statements/{id}", authMiddleware.Authenticate(http.HandlerFunc(statementHandler.GetStatement)))
+	mux.Handle("POST /api/statements/generate", authMiddleware.Authenticate(http.HandlerFunc(statementHandler.GenerateStatements)))
+	mux.Handle("POST /api/statements/{id}/approve", authMiddleware.Authenticate(http.HandlerFunc(statementHandler.ApproveStatement)))
+	mux.Handle("POST /api/statements/{id}/reject", authMiddleware.Authenticate(http.HandlerFunc(statementHandler.RejectStatement)))
+
+	// Report endpoints
+	mux.Handle("GET /api/reports/commission-detail", authMiddleware.Authenticate(http.HandlerFunc(reportHandler.GetCommissionDetail)))
+	mux.Handle("GET /api/reports/team-summary", authMiddleware.Authenticate(http.HandlerFunc(reportHandler.GetTeamSummary)))
+	mux.Handle("GET /api/reports/liability", authMiddleware.Authenticate(http.HandlerFunc(reportHandler.GetLiability)))
+	mux.Handle("GET /api/reports/export", authMiddleware.Authenticate(http.HandlerFunc(reportHandler.GetExport)))
 
 	// Create a context for the sync worker that can be cancelled
 	syncCtx, syncCancel := context.WithCancel(context.Background())

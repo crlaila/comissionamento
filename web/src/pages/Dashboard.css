@@ -1,0 +1,361 @@
+.dashboard {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.dashboard-header {
+  margin-bottom: 32px;
+}
+
+.dashboard-header h1 {
+  font-size: 28px;
+  margin: 0 0 8px 0;
+  color: #1a202c;
+}
+
+.dashboard-header .period-name {
+  margin: 0;
+  color: #718096;
+  font-size: 16px;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.dashboard-section {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.dashboard-section h2 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.commission-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.commission-card {
+  padding: 16px;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.commission-card.earned {
+  background-color: #f0fdf4;
+  border: 1px solid #86efac;
+}
+
+.commission-card.pending {
+  background-color: #fef3c7;
+  border: 1px solid #fcd34d;
+}
+
+.commission-card h3 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #4a5568;
+}
+
+.commission-card .amount {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a202c;
+}
+
+.commission-card.pending .amount {
+  color: #d97706;
+}
+
+.goal-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.attainment {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.attainment p {
+  margin: 0;
+  font-size: 16px;
+  color: #4a5568;
+}
+
+.attainment strong {
+  color: #667eea;
+  font-weight: 700;
+}
+
+.events-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.event-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 14px;
+}
+
+.event-item:last-child {
+  border-bottom: none;
+}
+
+.event-type {
+  font-weight: 600;
+  min-width: 120px;
+  color: #2d3748;
+}
+
+.event-item.acquisition .event-type {
+  color: #48bb78;
+}
+
+.event-item.renewal .event-type {
+  color: #4299e1;
+}
+
+.event-member {
+  flex: 1;
+  color: #4a5568;
+  padding: 0 16px;
+}
+
+.event-date {
+  color: #a0aec0;
+  font-size: 12px;
+  min-width: 100px;
+  text-align: right;
+}
+
+.no-events {
+  color: #a0aec0;
+  font-size: 14px;
+  margin: 0;
+  padding: 20px 0;
+  text-align: center;
+}
+
+.dashboard-footer {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.loading,
+.error {
+  padding: 32px;
+  text-align: center;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.error {
+  color: #e53e3e;
+  background-color: #fff5f5;
+  border-color: #fed7d7;
+}
+
+.team-table-section {
+  grid-column: 1 / -1;
+}
+
+.table-responsive {
+  overflow-x: auto;
+}
+
+.team-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.team-table thead {
+  background-color: #f7fafc;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.team-table th {
+  padding: 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #2d3748;
+  font-size: 14px;
+}
+
+.team-table td {
+  padding: 12px;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 14px;
+  color: #4a5568;
+}
+
+.team-table tbody tr:hover {
+  background-color: #f7fafc;
+}
+
+.member-name {
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.attainment {
+  font-weight: 600;
+  text-align: center;
+}
+
+.attainment.success {
+  color: #48bb78;
+}
+
+.attainment.warning {
+  color: #ed8936;
+}
+
+.attainment.danger {
+  color: #f56565;
+}
+
+.drill-down-button {
+  padding: 6px 12px;
+  background-color: #4299e1;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.drill-down-button:hover {
+  background-color: #3182ce;
+}
+
+.liability-card,
+.approval-card,
+.status-card {
+  text-align: center;
+  padding: 16px;
+  border-radius: 6px;
+  background-color: #f7fafc;
+}
+
+.liability-card .amount {
+  font-size: 32px;
+  font-weight: 700;
+  color: #1a202c;
+  margin: 12px 0;
+}
+
+.liability-card .subtitle {
+  color: #718096;
+  font-size: 13px;
+  margin: 8px 0 0 0;
+}
+
+.approval-count {
+  font-size: 48px;
+  font-weight: 700;
+  color: #667eea;
+  margin: 0;
+}
+
+.approval-label {
+  color: #4a5568;
+  font-size: 14px;
+  margin: 8px 0 12px 0;
+}
+
+.approval-link {
+  display: inline-block;
+  padding: 8px 16px;
+  background-color: #667eea;
+  color: white;
+  border-radius: 4px;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background-color 0.2s;
+}
+
+.approval-link:hover {
+  background-color: #5568d3;
+}
+
+.status-card .label {
+  color: #718096;
+  font-size: 13px;
+  margin: 0 0 12px 0;
+}
+
+.status-card .status {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 4px;
+  background-color: white;
+}
+
+.status-card .status.open {
+  color: #48bb78;
+}
+
+.status-card .status.closed {
+  color: #f56565;
+}
+
+.status-card .status.archived {
+  color: #a0aec0;
+}
+
+@media (max-width: 768px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-header h1 {
+    font-size: 24px;
+  }
+
+  .commission-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .team-table {
+    font-size: 12px;
+  }
+
+  .team-table th,
+  .team-table td {
+    padding: 8px;
+  }
+
+  .drill-down-button {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+}

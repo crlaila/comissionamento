@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -932,5 +933,247 @@ func TestRecoveryFromErrors(t *testing.T) {
 
 	if status2.Status != "idle" {
 		t.Errorf("Expected status 'idle' after successful sync, got %s", status2.Status)
+	}
+}
+
+// Test dashboard endpoints
+func TestDashboardEndpoints(t *testing.T) {
+	ctx := context.Background()
+
+	// Setup repositories
+	mockUserRepo := NewMockUserRepository()
+	mockPeriodRepo := NewMockPeriodRepository()
+	mockGoalRepo := NewMockGoalRepository(mockPeriodRepo.periods)
+	mockStatementRepo := NewMockStatementRepository()
+
+	// Create test users
+	repPassword := "rep123456"
+	repHash, _ := service.NewAuthService("test-key", mockUserRepo).HashPassword(repPassword)
+	repUser := &model.User{
+		Email:  "rep@example.com",
+		Name:   "Sales Rep",
+		Role:   model.RoleRep,
+		Active: true,
+	}
+	mockUserRepo.Create(ctx, repUser, repHash)
+
+	managerPassword := "manager123456"
+	managerHash, _ := service.NewAuthService("test-key", mockUserRepo).HashPassword(managerPassword)
+	managerUser := &model.User{
+		Email:    "manager@example.com",
+		Name:     "Manager",
+		Role:     model.RoleManager,
+		ManagerID: nil,
+		Active:   true,
+	}
+	mockUserRepo.Create(ctx, managerUser, managerHash)
+
+	financePassword := "finance123456"
+	financeHash, _ := service.NewAuthService("test-key", mockUserRepo).HashPassword(financePassword)
+	financeUser := &model.User{
+		Email:  "finance@example.com",
+		Name:   "Finance",
+		Role:   model.RoleFinance,
+		Active: true,
+	}
+	mockUserRepo.Create(ctx, financeUser, financeHash)
+
+	// Create a period
+	period := &model.Period{
+		Name:      "April 2026",
+		StartDate: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
+		EndDate:   time.Date(2026, 4, 30, 0, 0, 0, 0, time.UTC),
+		Status:    model.PeriodStatusOpen,
+	}
+	mockPeriodRepo.Create(ctx, period)
+
+	// Create a goal
+	goal := &model.Goal{
+		RepID:             repUser.ID,
+		PeriodID:          period.ID,
+		AcquisitionTarget: 10,
+		RenewalTarget:     5,
+		CommissionValue:   50000,
+	}
+	mockGoalRepo.Create(ctx, goal)
+
+	// Create commission service
+	mockEventRepo2 := &MockMemberEventRepository{
+		events: make(map[int64]*model.MemberEvent),
+		byHino: make(map[string]*model.MemberEvent),
+		nextID: 1,
+	}
+	
+	commissionService := service.NewCommissionService(mockGoalRepo, mockPeriodRepo, mockUserRepo, mockStatementRepo, mockEventRepo2, nil)
+
+	// Create handlers
+	dashboardHandler := handler.NewDashboardHandler(commissionService)
+	authService := service.NewAuthService("test-key", mockUserRepo)
+	authMiddleware := middleware.NewAuthMiddleware(authService)
+
+	// Test: Rep dashboard (rep role required)
+	tokenPair, _ := authService.Login(ctx, "rep@example.com", repPassword)
+	
+	repDashReq := httptest.NewRequest("GET", "/api/dashboard/rep", nil)
+	repDashReq.Header.Set("Authorization", "Bearer "+tokenPair.AccessToken)
+	
+	repDashHandler := authMiddleware.Authenticate(http.HandlerFunc(dashboardHandler.GetRepDashboard))
+	repDashW := httptest.NewRecorder()
+	repDashHandler.ServeHTTP(repDashW, repDashReq)
+
+	if repDashW.Code != http.StatusOK {
+		t.Fatalf("GET /api/dashboard/rep failed: got status %d, expected 200", repDashW.Code)
+	}
+
+	var repDash model.RepDashboard
+	if err := json.NewDecoder(repDashW.Body).Decode(&repDash); err != nil {
+		t.Fatalf("Failed to decode rep dashboard: %v", err)
+	}
+
+	if repDash.RepID != repUser.ID {
+		t.Errorf("Expected rep_id %d, got %d", repUser.ID, repDash.RepID)
+	}
+
+	if repDash.AcquisitionGoal != 10 {
+		t.Errorf("Expected acquisition goal 10, got %d", repDash.AcquisitionGoal)
+	}
+
+	// Test: Team dashboard (manager role required)
+	managerTokenPair, _ := authService.Login(ctx, "manager@example.com", managerPassword)
+	
+	teamDashReq := httptest.NewRequest("GET", "/api/dashboard/team", nil)
+	teamDashReq.Header.Set("Authorization", "Bearer "+managerTokenPair.AccessToken)
+	
+	teamDashHandler := authMiddleware.Authenticate(http.HandlerFunc(dashboardHandler.GetTeamDashboard))
+	teamDashW := httptest.NewRecorder()
+	teamDashHandler.ServeHTTP(teamDashW, teamDashReq)
+
+	if teamDashW.Code != http.StatusOK {
+		t.Fatalf("GET /api/dashboard/team failed: got status %d, expected 200", teamDashW.Code)
+	}
+
+	// Test: Org dashboard (finance role required)
+	financeTokenPair, _ := authService.Login(ctx, "finance@example.com", financePassword)
+	
+	orgDashReq := httptest.NewRequest("GET", "/api/dashboard/org", nil)
+	orgDashReq.Header.Set("Authorization", "Bearer "+financeTokenPair.AccessToken)
+	
+	orgDashHandler := authMiddleware.Authenticate(http.HandlerFunc(dashboardHandler.GetOrgDashboard))
+	orgDashW := httptest.NewRecorder()
+	orgDashHandler.ServeHTTP(orgDashW, orgDashReq)
+
+	if orgDashW.Code != http.StatusOK {
+		t.Fatalf("GET /api/dashboard/org failed: got status %d, expected 200", orgDashW.Code)
+	}
+
+	var orgDash model.OrgDashboard
+	if err := json.NewDecoder(orgDashW.Body).Decode(&orgDash); err != nil {
+		t.Fatalf("Failed to decode org dashboard: %v", err)
+	}
+
+	if orgDash.PeriodName != period.Name {
+		t.Errorf("Expected period name %s, got %s", period.Name, orgDash.PeriodName)
+	}
+}
+
+// Test goal endpoints
+func TestGoalEndpoints(t *testing.T) {
+	ctx := context.Background()
+
+	// Setup
+	mockUserRepo := NewMockUserRepository()
+	mockPeriodRepo := NewMockPeriodRepository()
+	mockGoalRepo := NewMockGoalRepository(mockPeriodRepo.periods)
+
+	// Create users
+	repPassword := "rep123456"
+	repHash, _ := service.NewAuthService("test-key", mockUserRepo).HashPassword(repPassword)
+	repUser := &model.User{
+		Email:  "rep@example.com",
+		Name:   "Sales Rep",
+		Role:   model.RoleRep,
+		Active: true,
+	}
+	mockUserRepo.Create(ctx, repUser, repHash)
+
+	managerPassword := "manager123456"
+	managerHash, _ := service.NewAuthService("test-key", mockUserRepo).HashPassword(managerPassword)
+	managerUser := &model.User{
+		Email:  "manager@example.com",
+		Name:   "Manager",
+		Role:   model.RoleManager,
+		Active: true,
+	}
+	mockUserRepo.Create(ctx, managerUser, managerHash)
+
+	// Create period
+	period := &model.Period{
+		Name:      "April 2026",
+		StartDate: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
+		EndDate:   time.Date(2026, 4, 30, 0, 0, 0, 0, time.UTC),
+		Status:    model.PeriodStatusOpen,
+	}
+	mockPeriodRepo.Create(ctx, period)
+
+	// Create a goal
+	goal := &model.Goal{
+		RepID:             repUser.ID,
+		PeriodID:          period.ID,
+		AcquisitionTarget: 10,
+		RenewalTarget:     5,
+		CommissionValue:   50000,
+	}
+	mockGoalRepo.Create(ctx, goal)
+
+	// Create handlers
+	goalHandler := handler.NewGoalHandler(mockGoalRepo, mockPeriodRepo)
+	authService := service.NewAuthService("test-key", mockUserRepo)
+	authMiddleware := middleware.NewAuthMiddleware(authService)
+
+	// Test: List goals as rep (should only see own)
+	tokenPair, _ := authService.Login(ctx, "rep@example.com", repPassword)
+
+	listURL := fmt.Sprintf("/api/goals?period_id=%d", period.ID)
+	listReq := httptest.NewRequest("GET", listURL, nil)
+	listReq.Header.Set("Authorization", "Bearer "+tokenPair.AccessToken)
+	
+	listHandler := authMiddleware.Authenticate(http.HandlerFunc(goalHandler.ListGoals))
+	listW := httptest.NewRecorder()
+	listHandler.ServeHTTP(listW, listReq)
+
+	if listW.Code != http.StatusOK {
+		t.Fatalf("GET /api/goals failed: got status %d, expected 200", listW.Code)
+	}
+
+	var goals []handler.GoalResponse
+	if err := json.NewDecoder(listW.Body).Decode(&goals); err != nil {
+		t.Fatalf("Failed to decode goals: %v", err)
+	}
+
+	if len(goals) != 1 {
+		t.Errorf("Expected 1 goal, got %d", len(goals))
+	}
+
+	// Test: Create goal as manager
+	managerTokenPair, _ := authService.Login(ctx, "manager@example.com", managerPassword)
+	
+	createBody, _ := json.Marshal(handler.CreateGoalRequest{
+		RepID:             repUser.ID,
+		PeriodID:          period.ID,
+		AcquisitionTarget: 15,
+		RenewalTarget:     8,
+		CommissionValue:   75000,
+	})
+
+	createReq := httptest.NewRequest("POST", "/api/goals", bytes.NewReader(createBody))
+	createReq.Header.Set("Authorization", "Bearer "+managerTokenPair.AccessToken)
+	createReq.Header.Set("Content-Type", "application/json")
+	
+	createHandler := authMiddleware.Authenticate(http.HandlerFunc(goalHandler.CreateGoal))
+	createW := httptest.NewRecorder()
+	createHandler.ServeHTTP(createW, createReq)
+
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("POST /api/goals failed: got status %d, expected 201", createW.Code)
 	}
 }
