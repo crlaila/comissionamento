@@ -22,6 +22,10 @@ func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
 
 // GetByEmail retrieves a user by email with password hash
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*model.UserWithPassword, error) {
+	if r == nil || r.pool == nil {
+		return nil, fmt.Errorf("database connection not initialized")
+	}
+
 	query := `
 		SELECT id, email, name, role, manager_id, active, password_hash, created_at, updated_at
 		FROM users
@@ -66,6 +70,10 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*model.U
 
 // GetByID retrieves a user by ID
 func (r *UserRepository) GetByID(ctx context.Context, id int64) (*model.User, error) {
+	if r == nil || r.pool == nil {
+		return nil, fmt.Errorf("database not initialized: UserRepository or pool is nil")
+	}
+
 	query := `
 		SELECT id, email, name, role, manager_id, active, created_at, updated_at
 		FROM users
@@ -99,6 +107,10 @@ func (r *UserRepository) GetByID(ctx context.Context, id int64) (*model.User, er
 
 // Create inserts a new user
 func (r *UserRepository) Create(ctx context.Context, user *model.User, passwordHash string) (int64, error) {
+	if r == nil || r.pool == nil {
+		return 0, fmt.Errorf("database not initialized: UserRepository or pool is nil")
+	}
+
 	query := `
 		INSERT INTO users (email, name, role, manager_id, active, password_hash, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
@@ -130,6 +142,10 @@ func (r *UserRepository) Create(ctx context.Context, user *model.User, passwordH
 
 // Update updates an existing user
 func (r *UserRepository) Update(ctx context.Context, user *model.User) error {
+	if r == nil || r.pool == nil {
+		return fmt.Errorf("database not initialized: UserRepository or pool is nil")
+	}
+
 	query := `
 		UPDATE users
 		SET name = $1, role = $2, manager_id = $3, active = $4, updated_at = NOW()
@@ -157,6 +173,10 @@ func (r *UserRepository) Update(ctx context.Context, user *model.User) error {
 
 // List retrieves all users
 func (r *UserRepository) List(ctx context.Context) ([]*model.User, error) {
+	if r == nil || r.pool == nil {
+		return nil, fmt.Errorf("database not initialized: UserRepository or pool is nil")
+	}
+
 	query := `
 		SELECT id, email, name, role, manager_id, active, created_at, updated_at
 		FROM users
@@ -201,6 +221,10 @@ func (r *UserRepository) List(ctx context.Context) ([]*model.User, error) {
 
 // StoreRefreshToken stores a refresh token in the database
 func (r *UserRepository) StoreRefreshToken(ctx context.Context, userID int64, token string, expiresAt time.Time) error {
+	if r == nil || r.pool == nil {
+		return fmt.Errorf("database not initialized: UserRepository or pool is nil")
+	}
+
 	query := `
 		INSERT INTO refresh_tokens (user_id, token, expires_at, created_at)
 		VALUES ($1, $2, $3, NOW())
@@ -216,6 +240,10 @@ func (r *UserRepository) StoreRefreshToken(ctx context.Context, userID int64, to
 
 // ValidateRefreshToken checks if a refresh token is valid and not revoked
 func (r *UserRepository) ValidateRefreshToken(ctx context.Context, userID int64, token string) error {
+	if r == nil || r.pool == nil {
+		return fmt.Errorf("database not initialized: UserRepository or pool is nil")
+	}
+
 	query := `
 		SELECT id FROM refresh_tokens
 		WHERE user_id = $1 AND token = $2 AND expires_at > NOW() AND revoked_at IS NULL
@@ -235,6 +263,10 @@ func (r *UserRepository) ValidateRefreshToken(ctx context.Context, userID int64,
 
 // RevokeRefreshToken revokes a refresh token
 func (r *UserRepository) RevokeRefreshToken(ctx context.Context, token string) error {
+	if r == nil || r.pool == nil {
+		return fmt.Errorf("database not initialized: UserRepository or pool is nil")
+	}
+
 	query := `
 		UPDATE refresh_tokens
 		SET revoked_at = NOW()
