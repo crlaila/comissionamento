@@ -42,10 +42,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Connect to database
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
+	// Connect to database (use background context, not timeout)
+	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		slog.Error("failed to connect to database", "error", err)
@@ -53,8 +51,17 @@ func main() {
 	}
 	defer pool.Close()
 
+	// Test connection
+	if err := pool.Ping(ctx); err != nil {
+		slog.Error("failed to ping database", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("database connected successfully")
+
 	// Initialize repositories and services
+	slog.Info("creating repositories", "pool_not_nil", pool != nil)
 	userRepo := repository.NewUserRepository(pool)
+	slog.Info("user repository created")
 	periodRepo := repository.NewPeriodRepository(pool)
 	eventRepo := repository.NewMemberEventRepository(pool)
 	goalRepo := repository.NewGoalRepository(pool)

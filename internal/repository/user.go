@@ -32,7 +32,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*model.U
 		WHERE email = $1
 	`
 
-	var user model.UserWithPassword
+	user := model.UserWithPassword{User: &model.User{}}
 	var managerId *int64
 
 	err := r.pool.QueryRow(ctx, query, email).Scan(
@@ -54,16 +54,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*model.U
 		return nil, fmt.Errorf("failed to query user by email: %w", err)
 	}
 
-	user.User = &model.User{
-		ID:        user.ID,
-		Email:     user.Email,
-		Name:      user.Name,
-		Role:      user.Role,
-		ManagerID: managerId,
-		Active:    user.Active,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-	}
+	user.ManagerID = managerId
 
 	return &user, nil
 }
