@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useApi } from '../hooks/useApi'
 import './GoalManagement.css'
@@ -6,74 +6,130 @@ import './GoalManagement.css'
 interface Goal {
   id: number
   rep_id: number
-  rep_name: string
+  rep_name?: string
   period_id: number
   acquisition_target: number
   renewal_target: number
   commission_value: number
 }
 
-interface GoalsData {
-  goals: Goal[]
+type GoalsResponse = Goal[] | { goals: Goal[] }
+
+const emptyForm = {
+  repId: '',
+  acquisitionTarget: '',
+  renewalTarget: '',
+  commissionValue: '',
 }
 
+const formatBRL = (centavos: number): string =>
+  (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
 export const GoalManagement: React.FC = () => {
-  const { user } = useAuth()
+  const { user, accessToken } = useAuth()
   const [periodId, setPeriodId] = useState<string>('')
   const [showForm, setShowForm] = useState(false)
-  const [formData, setFormData] = useState({
-    repId: '',
-    acquisitionTarget: '',
-    renewalTarget: '',
-    commissionValue: '',
-  })
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [formData, setFormData] = useState(emptyForm)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
-  const queryString = periodId ? `?period_id=${periodId}` : ''
-  const { data: goalsData, isLoading } = useApi<GoalsData>(
+  const queryString = periodId ? `?period_id=${periodId}&_r=${reloadKey}` : ''
+  const { data: goalsData, isLoading } = useApi<GoalsResponse>(
     `/api/goals${queryString}`,
     { skip: !periodId },
   )
+
+  const goals: Goal[] = Array.isArray(goalsData)
+    ? goalsData
+    : goalsData?.goals ?? []
+
+  useEffect(() => {
+    if (!showForm) {
+      setEditingId(null)
+      setFormData(emptyForm)
+    }
+  }, [showForm])
+
+  if (user?.role !== 'manager' && user?.role !== 'admin') {
+    return <div className="error">Acesso negado. Apenas gerenciadores podem gerenciar metas.</div>
+  }
+
+  const startEdit = (goal: Goal) => {
+    setEditingId(goal.id)
+    setFormData({
+      repId: String(goal.rep_id),
+      acquisitionTarget: String(goal.acquisition_target),
+      renewalTarget: String(goal.renewal_target),
+      commissionValue: String(goal.commission_value),
+    })
+    setShowForm(true)
+    setMessage(null)
+  }
+
+  const resetForm = () => {
+    setFormData(emptyForm)
+    setEditingId(null)
+    setShowForm(false)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setMessage(null)
 
-    if (!formData.repId || !formData.acquisitionTarget || !formData.renewalTarget || !formData.commissionValue) {
+    if (
+      !formData.repId ||
+      !formData.acquisitionTarget ||
+      !formData.renewalTarget ||
+      !formData.commissionValue
+    ) {
       setMessage({ type: 'error', text: 'Todos os campos são obrigatórios' })
       return
     }
 
-    try {
-      const response = await fetch('/api/goals', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${useAuth().accessToken}`,
-        },
-        body: JSON.stringify({
+    const isEdit = editingId !== null
+    const url = isEdit ? `/api/goals/${editingId}` : '/api/goals'
+    const method = isEdit ? 'PUT' : 'POST'
+    const body = isEdit
+      ? {
+          acquisition_target: parseInt(formData.acquisitionTarget),
+          renewal_target: parseInt(formData.renewalTarget),
+          commission_value: parseInt(formData.commissionValue),
+        }
+      : {
           rep_id: parseInt(formData.repId),
           period_id: parseInt(periodId),
           acquisition_target: parseInt(formData.acquisitionTarget),
           renewal_target: parseInt(formData.renewalTarget),
           commission_value: parseInt(formData.commissionValue),
-        }),
+        }
+
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken ?? ''}`,
+        },
+        body: JSON.stringify(body),
       })
 
       if (!response.ok) {
-        throw new Error('Falha ao criar meta')
+        throw new Error(isEdit ? 'Falha ao atualizar meta' : 'Falha ao criar meta')
       }
 
-      setMessage({ type: 'success', text: 'Meta criada com sucesso!' })
-      setFormData({ repId: '', acquisitionTarget: '', renewalTarget: '', commissionValue: '' })
-      setShowForm(false)
+      setMessage({
+        type: 'success',
+        text: isEdit ? 'Meta atualizada com sucesso!' : 'Meta criada com sucesso!',
+      })
+      resetForm()
+      setReloadKey((k) => k + 1)
     } catch (err) {
-      setMessage({ type: 'error', text: err instanceof Error ? err.message : 'Erro ao criar meta' })
+      setMessage({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Erro ao salvar meta',
+      })
     }
-  }
-
-  if (user?.role !== 'manager' && user?.role !== 'admin') {
-    return <div className="error">Acesso negado. Apenas gerenciadores podem gerenciar metas.</div>
   }
 
   return (
@@ -97,7 +153,15 @@ export const GoalManagement: React.FC = () => {
 
         <button
           className="add-goal-button"
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => {
+            if (showForm) {
+              resetForm()
+            } else {
+              setEditingId(null)
+              setFormData(emptyForm)
+              setShowForm(true)
+            }
+          }}
           disabled={!periodId}
         >
           {showForm ? '✕ Cancelar' : '+ Nova Meta'}
@@ -105,9 +169,7 @@ export const GoalManagement: React.FC = () => {
       </div>
 
       {message && (
-        <div className={`message ${message.type}`}>
-          {message.text}
-        </div>
+        <div className={`message ${message.type}`}>{message.text}</div>
       )}
 
       {showForm && (
@@ -120,6 +182,7 @@ export const GoalManagement: React.FC = () => {
               value={formData.repId}
               onChange={(e) => setFormData({ ...formData, repId: e.target.value })}
               placeholder="ID do representante"
+              disabled={editingId !== null}
               required
             />
           </div>
@@ -131,7 +194,9 @@ export const GoalManagement: React.FC = () => {
                 id="acquisitionTarget"
                 type="number"
                 value={formData.acquisitionTarget}
-                onChange={(e) => setFormData({ ...formData, acquisitionTarget: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, acquisitionTarget: e.target.value })
+                }
                 placeholder="0"
                 required
               />
@@ -143,7 +208,9 @@ export const GoalManagement: React.FC = () => {
                 id="renewalTarget"
                 type="number"
                 value={formData.renewalTarget}
-                onChange={(e) => setFormData({ ...formData, renewalTarget: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, renewalTarget: e.target.value })
+                }
                 placeholder="0"
                 required
               />
@@ -156,13 +223,17 @@ export const GoalManagement: React.FC = () => {
               id="commissionValue"
               type="number"
               value={formData.commissionValue}
-              onChange={(e) => setFormData({ ...formData, commissionValue: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, commissionValue: e.target.value })
+              }
               placeholder="0"
               required
             />
           </div>
 
-          <button type="submit" className="submit-button">Criar Meta</button>
+          <button type="submit" className="submit-button">
+            {editingId !== null ? 'Salvar Alterações' : 'Criar Meta'}
+          </button>
         </form>
       )}
 
@@ -171,7 +242,7 @@ export const GoalManagement: React.FC = () => {
           <h2>Metas do Período</h2>
           {isLoading ? (
             <p className="loading">Carregando metas...</p>
-          ) : goalsData?.goals && goalsData.goals.length > 0 ? (
+          ) : goals.length > 0 ? (
             <table className="goals-table">
               <thead>
                 <tr>
@@ -183,14 +254,16 @@ export const GoalManagement: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {goalsData.goals.map((goal) => (
+                {goals.map((goal) => (
                   <tr key={goal.id}>
-                    <td>{goal.rep_name}</td>
+                    <td>{goal.rep_name ?? `Rep #${goal.rep_id}`}</td>
                     <td>{goal.acquisition_target}</td>
                     <td>{goal.renewal_target}</td>
-                    <td>{(goal.commission_value / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                    <td>{formatBRL(goal.commission_value)}</td>
                     <td>
-                      <button className="edit-button">Editar</button>
+                      <button className="edit-button" onClick={() => startEdit(goal)}>
+                        Editar
+                      </button>
                     </td>
                   </tr>
                 ))}

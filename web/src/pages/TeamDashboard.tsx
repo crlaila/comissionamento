@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApi } from '../hooks/useApi'
 import { SyncStatus } from '../components/SyncStatus'
@@ -22,6 +22,14 @@ interface SyncStatusData {
   last_synced_at: number
 }
 
+interface TeamSummaryReport {
+  period_id: number
+  period_name: string
+  total_commission: number
+  average_attainment: number
+  reps_count: number
+}
+
 const formatBRL = (centavos: number): string => {
   const reais = centavos / 100
   return new Intl.NumberFormat('pt-BR', {
@@ -36,12 +44,30 @@ const getAttainmentClass = (percentage: number): string => {
   return 'danger'
 }
 
+const formatDelta = (current: number, previous: number): string => {
+  const diff = current - previous
+  const sign = diff > 0 ? '+' : diff < 0 ? '' : '±'
+  return `${sign}${formatBRL(diff)}`
+}
+
+const formatPctDelta = (current: number, previous: number): string => {
+  const diff = current - previous
+  const sign = diff > 0 ? '+' : diff < 0 ? '' : '±'
+  return `${sign}${Math.round(diff)}%`
+}
+
 export const TeamDashboard: React.FC = () => {
   const navigate = useNavigate()
+  const [comparePeriodId, setComparePeriodId] = useState<string>('')
+
   const { data: dashboardData, isLoading: dashboardLoading } =
     useApi<TeamDashboardData>('/api/dashboard/team')
   const { data: syncData } =
     useApi<SyncStatusData>('/api/sync/status')
+  const { data: compareData } = useApi<TeamSummaryReport>(
+    `/api/reports/team-summary?period_id=${comparePeriodId}`,
+    { skip: !comparePeriodId },
+  )
 
   if (dashboardLoading) {
     return <div className="loading">Carregando dashboard do time...</div>
@@ -53,6 +79,11 @@ export const TeamDashboard: React.FC = () => {
 
   const totalEarned = dashboardData.team_members.reduce((sum, m) => sum + m.commission_earned, 0)
   const totalPending = dashboardData.team_members.reduce((sum, m) => sum + m.commission_pending, 0)
+  const avgAttainment =
+    dashboardData.team_members.length > 0
+      ? dashboardData.team_members.reduce((sum, m) => sum + m.attainment_pct, 0) /
+        dashboardData.team_members.length
+      : 0
 
   return (
     <div className="dashboard team-dashboard">
@@ -76,6 +107,54 @@ export const TeamDashboard: React.FC = () => {
           </div>
         </section>
       </div>
+
+      <section className="dashboard-section compare-section">
+        <h2>Comparar com período anterior</h2>
+        <div className="compare-controls">
+          <label htmlFor="compare-period">Período de comparação:</label>
+          <input
+            id="compare-period"
+            type="number"
+            value={comparePeriodId}
+            onChange={(e) => setComparePeriodId(e.target.value)}
+            placeholder="ID do período"
+          />
+        </div>
+        {comparePeriodId && compareData && (
+          <div className="compare-grid">
+            <div className="compare-card">
+              <h3>{compareData.period_name}</h3>
+              <p className="compare-metric">
+                Total: <strong>{formatBRL(compareData.total_commission)}</strong>
+              </p>
+              <p className="compare-metric">
+                Atingimento: <strong>{Math.round(compareData.average_attainment)}%</strong>
+              </p>
+              <p className="compare-metric">
+                Representantes: <strong>{compareData.reps_count}</strong>
+              </p>
+            </div>
+            <div className="compare-card highlight">
+              <h3>{dashboardData.period_name}</h3>
+              <p className="compare-metric">
+                Total: <strong>{formatBRL(totalEarned + totalPending)}</strong>{' '}
+                <span className="compare-delta">
+                  ({formatDelta(totalEarned + totalPending, compareData.total_commission)})
+                </span>
+              </p>
+              <p className="compare-metric">
+                Atingimento: <strong>{Math.round(avgAttainment)}%</strong>{' '}
+                <span className="compare-delta">
+                  ({formatPctDelta(avgAttainment, compareData.average_attainment)})
+                </span>
+              </p>
+              <p className="compare-metric">
+                Representantes: <strong>{dashboardData.team_members.length}</strong>
+              </p>
+            </div>
+          </div>
+        )}
+      </section>
 
       <section className="dashboard-section team-table-section">
         <h2>Desempenho dos Representantes</h2>

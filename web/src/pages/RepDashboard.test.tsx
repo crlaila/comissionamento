@@ -214,4 +214,56 @@ describe('RepDashboard', () => {
       expect(screen.getByText('Maria Santos')).toBeInTheDocument()
     })
   })
+
+  it('renderiza corretamente em viewport mobile (375px)', async () => {
+    const originalInnerWidth = window.innerWidth
+    Object.defineProperty(window, 'innerWidth', {
+      writable: true,
+      configurable: true,
+      value: 375,
+    })
+    window.dispatchEvent(new Event('resize'))
+
+    const dashboardData = {
+      rep_id: 1,
+      period_name: 'Período 1',
+      acquisition_goal: 10,
+      acquisition_actual: 8,
+      renewal_goal: 5,
+      renewal_actual: 4,
+      attainment_pct: 80,
+      commission_earned: 50000,
+      commission_pending: 0,
+      recent_events: [
+        { id: 1, member_name: 'Cliente A', event_type: 'acquisition', event_date: '2026-04-20' },
+      ],
+    }
+
+    vi.mocked(ApiModule.useApi)
+      .mockReturnValueOnce({ data: dashboardData, isLoading: false, error: null })
+      .mockReturnValueOnce({ data: null, isLoading: false, error: null })
+
+    const { container } = render(
+      <BrowserRouter>
+        <RepDashboard />
+      </BrowserRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Período 1')).toBeInTheDocument()
+    })
+
+    expect(window.innerWidth).toBe(375)
+    expect(container.querySelector('.dashboard')).toBeTruthy()
+    expect(container.querySelector('.commission-cards')).toBeTruthy()
+    expect(container.querySelectorAll('.progress-bar').length).toBeGreaterThan(0)
+    expect(screen.getByText('Cliente A')).toBeInTheDocument()
+
+    Object.defineProperty(window, 'innerWidth', {
+      writable: true,
+      configurable: true,
+      value: originalInnerWidth,
+    })
+    window.dispatchEvent(new Event('resize'))
+  })
 })
