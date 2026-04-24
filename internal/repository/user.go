@@ -27,7 +27,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*model.U
 	}
 
 	query := `
-		SELECT id, email, name, role, manager_id, active, password_hash, created_at, updated_at
+		SELECT id, email, name, role::text, manager_id, active, password_hash, created_at, updated_at
 		FROM users
 		WHERE email = $1
 	`
@@ -75,7 +75,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id int64) (*model.User, er
 	}
 
 	query := `
-		SELECT id, email, name, role, manager_id, active, created_at, updated_at
+		SELECT id, email, name, role::text, manager_id, active, created_at, updated_at
 		FROM users
 		WHERE id = $1
 	`
@@ -178,7 +178,7 @@ func (r *UserRepository) List(ctx context.Context) ([]*model.User, error) {
 	}
 
 	query := `
-		SELECT id, email, name, role, manager_id, active, created_at, updated_at
+		SELECT id, email, name, role::text, manager_id, active, created_at, updated_at
 		FROM users
 		ORDER BY created_at DESC
 	`
