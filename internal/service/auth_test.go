@@ -408,3 +408,96 @@ func TestLoginInactiveUser(t *testing.T) {
 		t.Fatalf("Expected ErrInvalidCredentials for inactive user, got %v", err)
 	}
 }
+
+// Test: RefreshAccessToken validates token signature
+func TestRefreshAccessTokenValidation(t *testing.T) {
+	mockRepo := NewMockUserRepository()
+	authService := NewAuthService("secret", mockRepo)
+
+	// Try to refresh with invalid token
+	_, err := authService.RefreshAccessToken(context.Background(), "invalid-token")
+	if err != ErrInvalidToken {
+		t.Fatalf("Expected ErrInvalidToken, got %v", err)
+	}
+}
+
+// Test: RefreshAccessTokenWithUserID validates refresh token exists
+func TestRefreshAccessTokenWithUserIDValidatesToken(t *testing.T) {
+	mockRepo := NewMockUserRepository()
+	authService := NewAuthService("secret", mockRepo)
+
+	password := "mypassword123"
+	hash, _ := authService.HashPassword(password)
+
+	user := &model.User{
+		Email:  "test@example.com",
+		Name:   "Test User",
+		Role:   model.RoleRep,
+		Active: true,
+	}
+
+	mockRepo.Create(context.Background(), user, hash)
+	tokenPair, _ := authService.Login(context.Background(), "test@example.com", password)
+
+	// Revoke the token
+	mockRepo.RevokeRefreshToken(context.Background(), tokenPair.RefreshToken)
+
+	// Try to refresh with revoked token
+	_, err := authService.RefreshAccessTokenWithUserID(context.Background(), user.ID, tokenPair.RefreshToken)
+	if err == nil {
+		t.Fatal("RefreshAccessTokenWithUserID should fail with revoked token")
+	}
+}
+
+// Test: RefreshAccessTokenWithUserID fails with inactive user
+func TestRefreshAccessTokenWithInactiveUser(t *testing.T) {
+	mockRepo := NewMockUserRepository()
+	authService := NewAuthService("secret", mockRepo)
+
+	password := "mypassword123"
+	hash, _ := authService.HashPassword(password)
+
+	user := &model.User{
+		Email:  "test@example.com",
+		Name:   "Test User",
+		Role:   model.RoleRep,
+		Active: true,
+	}
+
+	mockRepo.Create(context.Background(), user, hash)
+	tokenPair, _ := authService.Login(context.Background(), "test@example.com", password)
+
+	// Deactivate the user
+	user.Active = false
+	mockRepo.Update(context.Background(), user)
+
+	// Try to refresh with token of now-inactive user
+	_, err := authService.RefreshAccessTokenWithUserID(context.Background(), user.ID, tokenPair.RefreshToken)
+	if err != ErrInvalidCredentials {
+		t.Fatalf("Expected ErrInvalidCredentials for inactive user, got %v", err)
+	}
+}
+
+// Test: HashPassword fails with bcrypt error (empty password hashing still succeeds)
+func TestHashPasswordSuccess(t *testing.T) {
+	mockRepo := NewMockUserRepository()
+	authService := NewAuthService("secret", mockRepo)
+
+	// Test with various password lengths to ensure proper hashing
+	testCases := []string{
+		"shortpass",
+		"averageLengthPassword123",
+		"veryLongPasswordWith!@#$%^&*()_+-=[]{}|;:,.<>?/",
+	}
+
+	for _, password := range testCases {
+		hash, err := authService.HashPassword(password)
+		if err != nil {
+			t.Fatalf("HashPassword failed for '%s': %v", password, err)
+		}
+
+		if !authService.VerifyPassword(hash, password) {
+			t.Fatalf("VerifyPassword failed for correct password: %s", password)
+		}
+	}
+}

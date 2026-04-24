@@ -235,3 +235,85 @@ func TestRequireRoleRejects(t *testing.T) {
 		t.Fatalf("Expected status 403, got %d", w.Code)
 	}
 }
+
+// Test: OptionalAuth with valid token injects user context
+func TestOptionalAuthWithValidToken(t *testing.T) {
+	mockRepo := NewMockUserRepository()
+	authService := service.NewAuthService("test-secret", mockRepo)
+	authMiddleware := NewAuthMiddleware(authService)
+
+	// Create user and get token
+	password := "password123"
+	hash, _ := authService.HashPassword(password)
+	user := &model.User{
+		ID:    1,
+		Email: "test@example.com",
+		Name:  "Test User",
+		Role:  model.RoleRep,
+		Active: true,
+	}
+	mockRepo.Create(context.Background(), user, hash)
+
+	tokenPair, _ := authService.Login(context.Background(), "test@example.com", password)
+
+	var capturedUserID int64
+	handler := authMiddleware.OptionalAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedUserID = r.Context().Value("user_id").(int64)
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/api/public", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenPair.AccessToken)
+
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d", w.Code)
+	}
+
+	if capturedUserID != user.ID {
+		t.Fatalf("Expected user_id %d, got %d", user.ID, capturedUserID)
+	}
+}
+
+// Test: OptionalAuth without token still allows request
+func TestOptionalAuthWithoutToken(t *testing.T) {
+	mockRepo := NewMockUserRepository()
+	authService := service.NewAuthService("test-secret", mockRepo)
+	authMiddleware := NewAuthMiddleware(authService)
+
+	handler := authMiddleware.OptionalAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/api/public", nil)
+
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d", w.Code)
+	}
+}
+
+// Test: OptionalAuth with invalid token still allows request
+func TestOptionalAuthWithInvalidToken(t *testing.T) {
+	mockRepo := NewMockUserRepository()
+	authService := service.NewAuthService("test-secret", mockRepo)
+	authMiddleware := NewAuthMiddleware(authService)
+
+	handler := authMiddleware.OptionalAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/api/public", nil)
+	req.Header.Set("Authorization", "Bearer invalid-token")
+
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d", w.Code)
+	}
+}

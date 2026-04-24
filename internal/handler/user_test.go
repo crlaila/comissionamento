@@ -45,6 +45,21 @@ func TestListUsers(t *testing.T) {
 	}
 }
 
+// Test: GET /api/users with invalid request method
+func TestListUsersInvalidMethod(t *testing.T) {
+	mockRepo := NewMockUserRepository()
+	authService := service.NewAuthService("test-secret", mockRepo)
+	userHandler := NewUserHandler(authService, mockRepo)
+
+	req := httptest.NewRequest("POST", "/api/users", nil)
+	w := httptest.NewRecorder()
+	userHandler.List(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("Expected status 405, got %d", w.Code)
+	}
+}
+
 // Test: POST /api/users creates a new user
 func TestCreateUserSuccess(t *testing.T) {
 	mockRepo := NewMockUserRepository()

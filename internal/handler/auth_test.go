@@ -386,3 +386,80 @@ func TestRefreshWrongMethod(t *testing.T) {
 	}
 }
 
+// Test: POST /api/auth/refresh without user context returns 401
+func TestRefreshWithoutUserContext(t *testing.T) {
+	mockRepo := NewMockUserRepository()
+	authService := service.NewAuthService("test-secret", mockRepo)
+	authHandler := NewAuthHandler(authService)
+
+	// Create user and get tokens
+	password := "password123"
+	hash, _ := authService.HashPassword(password)
+	user := &model.User{
+		Email:  "test@example.com",
+		Name:   "Test User",
+		Role:   model.RoleRep,
+		Active: true,
+	}
+	mockRepo.Create(context.Background(), user, hash)
+
+	tokenPair, _ := authService.Login(context.Background(), "test@example.com", password)
+
+	body, _ := json.Marshal(RefreshRequest{
+		RefreshToken: tokenPair.RefreshToken,
+	})
+
+	req := httptest.NewRequest("POST", "/api/auth/refresh", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	// Don't set user_id context
+
+	w := httptest.NewRecorder()
+	authHandler.Refresh(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("Expected status 401 without user context, got %d", w.Code)
+	}
+}
+
+// Test: POST /api/auth/refresh with valid token succeeds
+func TestRefreshValidToken(t *testing.T) {
+	mockRepo := NewMockUserRepository()
+	authService := service.NewAuthService("test-secret", mockRepo)
+	authHandler := NewAuthHandler(authService)
+
+	// Create user and get tokens
+	password := "password123"
+	hash, _ := authService.HashPassword(password)
+	user := &model.User{
+		Email:  "test@example.com",
+		Name:   "Test User",
+		Role:   model.RoleRep,
+		Active: true,
+	}
+	mockRepo.Create(context.Background(), user, hash)
+
+	tokenPair, _ := authService.Login(context.Background(), "test@example.com", password)
+
+	body, _ := json.Marshal(RefreshRequest{
+		RefreshToken: tokenPair.RefreshToken,
+	})
+
+	req := httptest.NewRequest("POST", "/api/auth/refresh", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(context.WithValue(req.Context(), "user_id", user.ID))
+
+	w := httptest.NewRecorder()
+	authHandler.Refresh(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d", w.Code)
+	}
+
+	var resp RefreshResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+
+	if resp.AccessToken == "" {
+		t.Fatal("Response should include new access token")
+	}
+}
+
