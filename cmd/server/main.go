@@ -7,10 +7,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
 	"comissionamento/internal/handler"
+	"comissionamento/internal/hinova"
 	"comissionamento/internal/middleware"
 	"comissionamento/internal/repository"
 	"comissionamento/internal/service"
@@ -53,12 +55,35 @@ func main() {
 
 	// Initialize repositories and services
 	userRepo := repository.NewUserRepository(pool)
+	periodRepo := repository.NewPeriodRepository(pool)
+	eventRepo := repository.NewMemberEventRepository(pool)
 	authService := service.NewAuthService(jwtSecret, userRepo)
 	authMiddleware := middleware.NewAuthMiddleware(authService)
+
+	// Initialize Hinova client
+	hinovaToken := os.Getenv("HINOVA_API_TOKEN")
+	var hinovaClient hinova.HinovaClient
+	if hinovaToken != "" {
+		hinovaClient = hinova.NewHTTPClient("https://api.hinova.com.br/api/sga/v2", hinovaToken)
+	} else {
+		slog.Warn("HINOVA_API_TOKEN not set, using mock client for development")
+		hinovaClient = hinova.NewMockClient()
+	}
+
+	// Initialize Sync service with configurable interval
+	syncInterval := 5 * time.Minute // default
+	if syncIntervalStr := os.Getenv("SYNC_INTERVAL"); syncIntervalStr != "" {
+		if minutes, err := strconv.Atoi(syncIntervalStr); err == nil && minutes > 0 {
+			syncInterval = time.Duration(minutes) * time.Minute
+		}
+	}
+	syncService := service.NewSyncService(hinovaClient, eventRepo, syncInterval)
 
 	// Initialize handlers
 	authHandler := handler.NewAuthHandler(authService)
 	userHandler := handler.NewUserHandler(authService, userRepo)
+	periodHandler := handler.NewPeriodHandler(periodRepo)
+	syncHandler := handler.NewSyncHandler(syncService)
 
 	mux := http.NewServeMux()
 
@@ -79,6 +104,22 @@ func main() {
 	mux.Handle("POST /api/users", authMiddleware.Authenticate(authMiddleware.RequireRole("admin")(http.HandlerFunc(userHandler.Create))))
 	mux.Handle("PUT /api/users/{id}", authMiddleware.Authenticate(authMiddleware.RequireRole("admin")(http.HandlerFunc(userHandler.Update))))
 
+	// Period endpoints (admin only)
+	mux.Handle("GET /api/periods", authMiddleware.Authenticate(authMiddleware.RequireRole("admin")(http.HandlerFunc(periodHandler.List))))
+	mux.Handle("POST /api/periods", authMiddleware.Authenticate(authMiddleware.RequireRole("admin")(http.HandlerFunc(periodHandler.Create))))
+	mux.Handle("PUT /api/periods/{id}", authMiddleware.Authenticate(authMiddleware.RequireRole("admin")(http.HandlerFunc(periodHandler.Update))))
+
+	// Sync endpoints
+	mux.HandleFunc("GET /api/sync/status", syncHandler.GetStatus)
+	mux.Handle("POST /api/sync/trigger", authMiddleware.Authenticate(authMiddleware.RequireRole("admin")(http.HandlerFunc(syncHandler.Trigger))))
+
+	// Create a context for the sync worker that can be cancelled
+	syncCtx, syncCancel := context.WithCancel(context.Background())
+	defer syncCancel()
+
+	// Start sync worker in background
+	go syncService.StartPolling(syncCtx)
+
 	server := &http.Server{
 		Addr:         ":" + port,
 		Handler:      mux,
@@ -92,6 +133,9 @@ func main() {
 		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 		sig := <-sigChan
 		slog.Info("shutdown signal received", "signal", sig.String())
+
+		// Cancel sync worker context
+		syncCancel()
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
